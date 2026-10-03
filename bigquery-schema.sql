@@ -118,3 +118,45 @@ CREATE TABLE IF NOT EXISTS `cio-converged-charging-np-72ca.lumen.triage_outcomes
 OPTIONS (
   description = 'Lumen triage outcome scores — one row per resolved PagerDuty incident'
 );
+
+
+-- ============================================================
+-- Table: lumen.runbook_catalog  (runbook lookup)
+-- ============================================================
+-- Read by the workflow at triage time via:
+--   SELECT service, file FROM `cio-converged-charging-np-72ca.lumen.runbook_catalog`
+-- The workflow maps each row to { s: service, f: file } and uses it to suggest
+-- a runbook URL built as: <RUNBOOK_BASE> + file
+-- RUNBOOK_BASE = https://github.com/telus/bil-ccs-ratingprofile-gateway/blob/stage/docs/
+--
+-- service  — normalized service name (strip -production/-pr/-stage/-np suffixes).
+--            Must be >= 8 chars for prefix-matching to activate.
+-- file     — runbook filename relative to RUNBOOK_BASE (e.g. RunBook.md)
+-- repo_url — optional: full base URL if the runbook lives in a different repo/branch
+--            than the workflow default. Not read by the workflow today; for reference.
+-- description — free-text notes on what this runbook covers.
+-- updated_at  — when this entry was last reviewed / updated.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `cio-converged-charging-np-72ca.lumen.runbook_catalog`
+(
+  service     STRING NOT NULL,
+  file        STRING NOT NULL,
+  repo_url    STRING,
+  description STRING,
+  updated_at  TIMESTAMP
+)
+OPTIONS (
+  description = 'Runbook catalog — maps normalized service names to runbook files on GitHub'
+);
+
+-- Seed initial entry for ccs-ratingprofile-gateway
+INSERT INTO `cio-converged-charging-np-72ca.lumen.runbook_catalog`
+  (service, file, repo_url, description, updated_at)
+VALUES
+  (
+    'ccs-ratingprofile-gateway',
+    'RunBook.md',
+    'https://github.com/telus/bil-ccs-ratingprofile-gateway/blob/stage/docs/',
+    'Primary runbook for ccs-ratingprofile-gateway incidents',
+    CURRENT_TIMESTAMP()
+  );

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-03 (feat: runbook_catalog BigQuery table)
+
+- Added `lumen.runbook_catalog` DDL to bigquery-schema.sql
+  - Columns: `service` (normalized name), `file` (runbook filename), `repo_url`, `description`, `updated_at`
+  - Seeded with initial entry: `ccs-ratingprofile-gateway` → `RunBook.md`
+  - Workflow reads `SELECT service, file` at triage time; falls back to hardcoded seed if table is empty
+
 ## 2026-10-03 (fix: BigQuery null values — continued)
 
 - **Build Detailed Analysis**: replaced all `.item.json` with `.first().json` for the five upstream node references
