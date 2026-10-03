@@ -1,0 +1,5 @@
+# Contains real credentials — never commit
+lumen-triage.properties
+
+# Backup files
+*-bak.*
