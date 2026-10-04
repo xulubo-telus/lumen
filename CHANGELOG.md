@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-04 16:00 (chore: rename workflow JSON to Lumen-Triage-RCS.json)
+
+- Renamed `Lumen-Triage-ccs-ratingprofile.json` → `Lumen-Triage-RCS.json`
+- Updated `patch-credentials.ps1` to reference new filename
+
 ## 2026-10-04 15:45 (fix: httpBearerAuth for Dynatrace Platform and FuelIX Vector nodes)
 
 - Changed `genericAuthType` from `httpHeaderAuth` → `httpBearerAuth` for 13 nodes:

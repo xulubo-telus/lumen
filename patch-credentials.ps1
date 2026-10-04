@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $propsFile = Join-Path $PSScriptRoot "lumen-triage.properties"
-$wfFile    = Join-Path $PSScriptRoot "Lumen-Triage-ccs-ratingprofile.json"
+$wfFile    = Join-Path $PSScriptRoot "Lumen-Triage-RCS.json"
 
 # --- Load properties -----------------------------------------------------------
 $props = @{}
