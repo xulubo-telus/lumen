@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-04 14:00 (docs: Dynatrace platform token URL in USAGE.md)
+
+- Updated USAGE.md credential table: Dynatrace API token now references https://myaccount.dynatrace.com/platformTokens
+
 ## 2026-10-03 (feat: runbook_catalog BigQuery table)
 
 - Added `lumen.runbook_catalog` DDL to bigquery-schema.sql

@@ -25,7 +25,7 @@ Before activating, configure the following credentials in n8n (**Settings → Cr
 |---|---|---|
 | PagerDuty API key | `PAGERDUTY_API_KEY` | Get PagerDuty Incident, Get PD Alerts, Post Triage to PagerDuty |
 | Google OAuth2 | `GCP_OAUTH_CLIENT_ID` / `GCP_OAUTH_CLIENT_SECRET` | GCP Monitoring (CloudSQL, GKE metrics), Cloud Logging, BigQuery |
-| Dynatrace API token | *(obtain from Dynatrace → Access Tokens)* | All Dynatrace REST and Grail (DQL) nodes |
+| Dynatrace API token | Request platform token from https://myaccount.dynatrace.com/platformTokens | All Dynatrace REST and Grail (DQL) nodes |
 | Anthropic / FuelIX API key | `OPENAI_API_KEY` | Claude Triage Agent, Outcome Chat Model |
 
 ---
