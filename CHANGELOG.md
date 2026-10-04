@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-04 16:30 (feat: replace Slack nodes with Google Chat webhook)
+
+- Removed both `n8n-nodes-base.slack` nodes (required Slack OAuth credential)
+- Renamed `Build Slack Message` → `Build Google Chat Message`; output key `slack_text` → `gchat_text`
+- Added `Post Triage to Google Chat` (HTTP Request, POST to `GCHAT_WEBHOOK_TRIAGE_PLACEHOLDER`)
+  - Body: `{ text: $json.gchat_text }` — Google Chat bold syntax (`*bold*`) is identical to Slack mrkdwn
+- Added `Post Error to Google Chat` (HTTP Request, POST to `GCHAT_WEBHOOK_ERROR_PLACEHOLDER`)
+  - Body: plain text error report with workflow/node/error/execution fields
+- Google Chat webhooks use no n8n credential — auth is embedded in the URL
+- Added `GCHAT_WEBHOOK_TRIAGE` and `GCHAT_WEBHOOK_ERROR` to `lumen-triage.properties`
+- Updated `patch-credentials.ps1`: removed Slack wiring; added URL substitution for both webhooks
+
 ## 2026-10-04 16:00 (chore: rename workflow JSON to Lumen-Triage-RCS.json)
 
 - Renamed `Lumen-Triage-ccs-ratingprofile.json` → `Lumen-Triage-RCS.json`

@@ -1,9 +1,10 @@
 # patch-credentials.ps1
-# Reads credential names from lumen-triage.properties and wires them into
-# Lumen-Triage-ccs-ratingprofile.json so nodes don't show empty dropdowns after import.
+# Reads credential names and Google Chat webhook URLs from lumen-triage.properties
+# and patches Lumen-Triage-RCS.json so nodes don't show empty dropdowns after import
+# and Google Chat webhooks are ready to fire.
 #
 # Usage: .\patch-credentials.ps1
-# Run from the lumen-n8n directory after filling in N8N_CRED_NAME_* values.
+# Run from the lumen-n8n directory after filling in N8N_CRED_NAME_* and GCHAT_WEBHOOK_* values.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -21,14 +22,15 @@ Get-Content $propsFile | ForEach-Object {
 
 function Get-Prop($key) { if ($props.ContainsKey($key)) { $props[$key] } else { "" } }
 
-$dtLegacy   = Get-Prop 'N8N_CRED_NAME_DYNATRACE_LEGACY'
-$dtPlatform = Get-Prop 'N8N_CRED_NAME_DYNATRACE_PLATFORM'
-$pdName     = Get-Prop 'N8N_CRED_NAME_PAGERDUTY'
-$googleName = Get-Prop 'N8N_CRED_NAME_GOOGLE_OAUTH2'
-$openaiName = Get-Prop 'N8N_CRED_NAME_FUELIX_OPENAI'
-$vectorName = Get-Prop 'N8N_CRED_NAME_FUELIX_VECTOR'
-$slackName  = Get-Prop 'N8N_CRED_NAME_SLACK'
-$irisName   = Get-Prop 'N8N_CRED_NAME_IRIS'
+$dtLegacy        = Get-Prop 'N8N_CRED_NAME_DYNATRACE_LEGACY'
+$dtPlatform      = Get-Prop 'N8N_CRED_NAME_DYNATRACE_PLATFORM'
+$pdName          = Get-Prop 'N8N_CRED_NAME_PAGERDUTY'
+$googleName      = Get-Prop 'N8N_CRED_NAME_GOOGLE_OAUTH2'
+$openaiName      = Get-Prop 'N8N_CRED_NAME_FUELIX_OPENAI'
+$vectorName      = Get-Prop 'N8N_CRED_NAME_FUELIX_VECTOR'
+$irisName        = Get-Prop 'N8N_CRED_NAME_IRIS'
+$gchatTriage     = Get-Prop 'GCHAT_WEBHOOK_TRIAGE'
+$gchatError      = Get-Prop 'GCHAT_WEBHOOK_ERROR'
 
 Write-Host "Credential names read from properties:"
 Write-Host "  DYNATRACE_LEGACY   = '$dtLegacy'"
@@ -37,8 +39,11 @@ Write-Host "  PAGERDUTY          = '$pdName'"
 Write-Host "  GOOGLE_OAUTH2      = '$googleName'"
 Write-Host "  FUELIX_OPENAI      = '$openaiName'"
 Write-Host "  FUELIX_VECTOR      = '$vectorName'"
-Write-Host "  SLACK              = '$slackName'"
 Write-Host "  IRIS               = '$irisName'"
+Write-Host ""
+Write-Host "Google Chat webhooks:"
+Write-Host "  GCHAT_WEBHOOK_TRIAGE = '$gchatTriage'"
+Write-Host "  GCHAT_WEBHOOK_ERROR  = '$gchatError'"
 Write-Host ""
 
 # --- Helper: build credential object ------------------------------------------
@@ -65,13 +70,26 @@ foreach ($node in $wf.nodes) {
         $auth = $node.parameters.authentication
         $url  = [string]$node.parameters.url
 
+        # --- Google Chat webhook URL substitution ---
+        if ($url -eq 'GCHAT_WEBHOOK_TRIAGE_PLACEHOLDER' -and $gchatTriage) {
+            $node.parameters.url = $gchatTriage
+            Write-Host "  [gchat] $($node.name) → URL set"
+            $patched++
+        }
+        elseif ($url -eq 'GCHAT_WEBHOOK_ERROR_PLACEHOLDER' -and $gchatError) {
+            $node.parameters.url = $gchatError
+            Write-Host "  [gchat] $($node.name) → URL set"
+            $patched++
+        }
+
+        # --- Credential wiring ---
         if ($auth -eq 'predefinedCredentialType') {
             $ncType = [string]$node.parameters.nodeCredentialType
             $credName = switch ($ncType) {
-                'dynatraceApi'   { $dtLegacy }
+                'dynatraceApi'    { $dtLegacy }
                 'googleOAuth2Api' { $googleName }
-                'openAiApi'      { $openaiName }
-                default          { "" }
+                'openAiApi'       { $openaiName }
+                default           { "" }
             }
             if ($credName) {
                 $node | Add-Member -MemberType NoteProperty -Name credentials -Value (New-Cred $ncType $credName) -Force
@@ -102,15 +120,6 @@ foreach ($node in $wf.nodes) {
         if ($openaiName) {
             $node | Add-Member -MemberType NoteProperty -Name credentials -Value (New-Cred 'openAiApi' $openaiName) -Force
             Write-Host "  [openAiApi/langchain] $($node.name) → '$openaiName'"
-            $patched++
-        }
-    }
-
-    # Slack nodes
-    elseif ($node.type -eq 'n8n-nodes-base.slack') {
-        if ($slackName) {
-            $node | Add-Member -MemberType NoteProperty -Name credentials -Value (New-Cred 'slackApi' $slackName) -Force
-            Write-Host "  [slackApi] $($node.name) → '$slackName'"
             $patched++
         }
     }
