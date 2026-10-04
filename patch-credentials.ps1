@@ -81,6 +81,8 @@ foreach ($node in $wf.nodes) {
         }
 
         elseif ($auth -eq 'genericCredentialType') {
+            # Bearer-token services use httpBearerAuth; header-based services use httpHeaderAuth
+            $credType = if ($url -match 'apps\.dynatrace\.com|vectors\.fuelix\.ai') { 'httpBearerAuth' } else { 'httpHeaderAuth' }
             $credName = if     ($url -match 'apps\.dynatrace\.com')  { $dtPlatform }
                         elseif ($url -match 'api\.pagerduty\.com')   { $pdName }
                         elseif ($url -match 'vectors\.fuelix\.ai')   { $vectorName }
@@ -88,8 +90,8 @@ foreach ($node in $wf.nodes) {
                         else                                          { "" }
 
             if ($credName) {
-                $node | Add-Member -MemberType NoteProperty -Name credentials -Value (New-Cred 'httpHeaderAuth' $credName) -Force
-                Write-Host "  [httpHeaderAuth] $($node.name) → '$credName'"
+                $node | Add-Member -MemberType NoteProperty -Name credentials -Value (New-Cred $credType $credName) -Force
+                Write-Host "  [$credType] $($node.name) → '$credName'"
                 $patched++
             }
         }

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-04 15:45 (fix: httpBearerAuth for Dynatrace Platform and FuelIX Vector nodes)
+
+- Changed `genericAuthType` from `httpHeaderAuth` → `httpBearerAuth` for 13 nodes:
+  - 10 Dynatrace Platform nodes (`apps.dynatrace.com/platform/`)
+  - 3 FuelIX Vector nodes (`vectors.fuelix.ai`)
+- PagerDuty (8 nodes) and IRIS (2 nodes) remain `httpHeaderAuth`
+- Updated `patch-credentials.ps1` to use `httpBearerAuth` credential key for those two services
+- Updated `lumen-triage.properties` comments to reflect correct credential types
+
 ## 2026-10-04 15:30 (feat: credential name wiring via properties file)
 
 - Added `N8N_CRED_NAME_*` keys to `lumen-triage.properties` for all 8 credential types
