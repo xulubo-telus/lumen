@@ -67,7 +67,7 @@ foreach ($node in $wf.nodes) {
 
     # HTTP Request nodes
     if ($node.type -eq 'n8n-nodes-base.httpRequest') {
-        $auth = $node.parameters.authentication
+        $auth = if ($node.parameters.PSObject.Properties['authentication']) { [string]$node.parameters.authentication } else { "" }
         $url  = [string]$node.parameters.url
 
         # --- Google Chat webhook URL substitution ---

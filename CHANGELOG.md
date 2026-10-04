@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 17:00 (fix: patch-credentials.ps1 crash on nodes without authentication property)
+
+- Guard `$node.parameters.authentication` access with PSObject.Properties check
+- Google Chat HTTP Request nodes have no `authentication` field; strict mode threw on access
+- Script now completes cleanly: 41 nodes patched with all credential names filled
+
 ## 2026-10-04 16:30 (feat: replace Slack nodes with Google Chat webhook)
 
 - Removed both `n8n-nodes-base.slack` nodes (required Slack OAuth credential)
