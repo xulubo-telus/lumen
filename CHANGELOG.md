@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-04 15:30 (feat: credential name wiring via properties file)
+
+- Added `N8N_CRED_NAME_*` keys to `lumen-triage.properties` for all 8 credential types
+  - DYNATRACE_LEGACY, DYNATRACE_PLATFORM, PAGERDUTY, GOOGLE_OAUTH2,
+    FUELIX_OPENAI, FUELIX_VECTOR, SLACK, IRIS
+- Added `patch-credentials.ps1` — reads names from properties, wires them into workflow JSON
+  - Dynatrace Legacy nodes → `dynatraceApi` credential type
+  - Dynatrace Platform nodes (`apps.dynatrace.com/platform/`) → `httpHeaderAuth`
+  - PagerDuty/FuelIX vector/IRIS nodes → `httpHeaderAuth` (separate per-service credential)
+  - Google OAuth2 nodes → `googleOAuth2Api`
+  - LangChain + Embed nodes → `openAiApi`
+  - Slack nodes → `slackApi`
+- Applied patch: 3 Dynatrace Legacy nodes now wired to `Dynatrace account 7`
+
 ## 2026-10-04 14:00 (docs: Dynatrace platform token URL in USAGE.md)
 
 - Updated USAGE.md credential table: Dynatrace API token now references https://myaccount.dynatrace.com/platformTokens
