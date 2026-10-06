@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-06 11:30 (docs: add Lumen project overview link to USAGE.md)
+
+- Added link to Lumen Project Overview artifact at the top of USAGE.md as a prerequisite read before n8n setup
+
+## 2026-10-06 11:15 (feat: BigQuery project ID configurable via properties file)
+
+- Replaced hardcoded `cio-converged-charging-np-72ca` (8 occurrences) in `Lumen-Triage-RCS.json` with `YOUR_BQ_PROJECT_ID`
+- `patch-credentials.ps1` now substitutes all 8 occurrences via raw string replacement before JSON parsing
+
+## 2026-10-06 11:00 (feat: workflow name configurable via properties file)
+
+- Replaced `"name":"Lumen-Triage-external"` in `Lumen-Triage-RCS.json` with `N8N_WORKFLOW_NAME_PLACEHOLDER`
+- Added `N8N_WORKFLOW_NAME=Lumen-Triage-external` to `lumen-triage.properties` under new "n8n Workflow Identity" section
+- `patch-credentials.ps1` now substitutes the workflow name into the output file
+
 ## 2026-10-06 10:30 (feat: PagerDuty webhook path configurable via properties file)
 
 - Replaced hardcoded UUID in PagerDuty Webhook node `path` with `N8N_PAGERDUTY_WEBHOOK_PATH_PLACEHOLDER`

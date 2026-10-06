@@ -30,9 +30,11 @@ $googleName  = Get-Prop 'N8N_CRED_NAME_GOOGLE_OAUTH2'
 $openaiName  = Get-Prop 'N8N_CRED_NAME_FUELIX_OPENAI'
 $vectorName  = Get-Prop 'N8N_CRED_NAME_FUELIX_VECTOR'
 $irisName    = Get-Prop 'N8N_CRED_NAME_IRIS'
-$gchatTriage  = Get-Prop 'GCHAT_WEBHOOK_TRIAGE'
-$gchatError   = Get-Prop 'GCHAT_WEBHOOK_ERROR'
+$gchatTriage   = Get-Prop 'GCHAT_WEBHOOK_TRIAGE'
+$gchatError    = Get-Prop 'GCHAT_WEBHOOK_ERROR'
 $pdWebhookPath = Get-Prop 'N8N_PAGERDUTY_WEBHOOK_PATH'
+$wfName        = Get-Prop 'N8N_WORKFLOW_NAME'
+$bqProjectId   = Get-Prop 'YOUR_BQ_PROJECT_ID'
 
 Write-Host "Reading template : $templateFile"
 Write-Host "Writing output   : $outputFile"
@@ -50,6 +52,8 @@ Write-Host "Google Chat webhooks:"
 Write-Host "  GCHAT_WEBHOOK_TRIAGE        = $(if ($gchatTriage)   { '(set)' } else { '(not set — placeholder kept)' })"
 Write-Host "  GCHAT_WEBHOOK_ERROR         = $(if ($gchatError)    { '(set)' } else { '(not set — placeholder kept)' })"
 Write-Host "  N8N_PAGERDUTY_WEBHOOK_PATH  = $(if ($pdWebhookPath) { $pdWebhookPath } else { '(not set — placeholder kept)' })"
+Write-Host "  N8N_WORKFLOW_NAME           = $(if ($wfName) { $wfName } else { '(not set — placeholder kept)' })"
+Write-Host "  YOUR_BQ_PROJECT_ID          = $(if ($bqProjectId) { $bqProjectId } else { '(not set — placeholder kept)' })"
 Write-Host ""
 
 # --- Helper: build credential object ------------------------------------------
@@ -63,9 +67,27 @@ function New-Cred($type, $name) {
 }
 
 # --- Load template (read-only source) -----------------------------------------
-$wf = Get-Content $templateFile -Raw | ConvertFrom-Json -Depth 100
+$raw = Get-Content $templateFile -Raw
 
-$patched = 0
+# Raw string substitutions (applied before JSON parsing for efficiency)
+$rawPatched = 0
+if ($bqProjectId -and $raw.Contains('YOUR_BQ_PROJECT_ID')) {
+    $occurrences = ([regex]::Matches($raw, 'YOUR_BQ_PROJECT_ID')).Count
+    $raw = $raw.Replace('YOUR_BQ_PROJECT_ID', $bqProjectId)
+    Write-Host "  [bq-project-id] $occurrences occurrence(s) → '$bqProjectId'"
+    $rawPatched += $occurrences
+}
+
+$wf = $raw | ConvertFrom-Json -Depth 100
+
+$patched = $rawPatched
+
+# Workflow name substitution
+if ($wf.name -eq 'N8N_WORKFLOW_NAME_PLACEHOLDER' -and $wfName) {
+    $wf.name = $wfName
+    Write-Host "  [workflow-name] → '$wfName'"
+    $patched++
+}
 
 foreach ($node in $wf.nodes) {
 

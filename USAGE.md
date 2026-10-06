@@ -1,5 +1,7 @@
 # Lumen Triage — Usage Guide
 
+> **Before proceeding:** Read the [Lumen Project Overview](https://claude.ai/artifact/PMxMb8nKECB6kbnufPMZNA?sk=Jg3cL7ZdP6zmqu4sRojPrQ) for general context on the project before configuring n8n.
+
 ## Prerequisites
 
 - n8n instance running and accessible
