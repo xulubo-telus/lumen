@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-06 10:30 (feat: PagerDuty webhook path configurable via properties file)
+
+- Replaced hardcoded UUID in PagerDuty Webhook node `path` with `N8N_PAGERDUTY_WEBHOOK_PATH_PLACEHOLDER`
+- Added `N8N_PAGERDUTY_WEBHOOK_PATH` key to `lumen-triage.properties` (defaults to original UUID)
+- `patch-credentials.ps1` now substitutes the path into the output file
+
 ## 2026-10-06 10:00 (refactor: template/output separation for workflow JSON)
 
 - `Lumen-Triage-RCS.json` is now a clean template — no credentials wired, webhook URLs as placeholders

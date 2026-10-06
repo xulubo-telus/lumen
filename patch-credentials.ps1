@@ -30,8 +30,9 @@ $googleName  = Get-Prop 'N8N_CRED_NAME_GOOGLE_OAUTH2'
 $openaiName  = Get-Prop 'N8N_CRED_NAME_FUELIX_OPENAI'
 $vectorName  = Get-Prop 'N8N_CRED_NAME_FUELIX_VECTOR'
 $irisName    = Get-Prop 'N8N_CRED_NAME_IRIS'
-$gchatTriage = Get-Prop 'GCHAT_WEBHOOK_TRIAGE'
-$gchatError  = Get-Prop 'GCHAT_WEBHOOK_ERROR'
+$gchatTriage  = Get-Prop 'GCHAT_WEBHOOK_TRIAGE'
+$gchatError   = Get-Prop 'GCHAT_WEBHOOK_ERROR'
+$pdWebhookPath = Get-Prop 'N8N_PAGERDUTY_WEBHOOK_PATH'
 
 Write-Host "Reading template : $templateFile"
 Write-Host "Writing output   : $outputFile"
@@ -46,8 +47,9 @@ Write-Host "  FUELIX_VECTOR      = '$vectorName'"
 Write-Host "  IRIS               = '$irisName'"
 Write-Host ""
 Write-Host "Google Chat webhooks:"
-Write-Host "  GCHAT_WEBHOOK_TRIAGE = $(if ($gchatTriage) { '(set)' } else { '(not set — placeholder kept)' })"
-Write-Host "  GCHAT_WEBHOOK_ERROR  = $(if ($gchatError)  { '(set)' } else { '(not set — placeholder kept)' })"
+Write-Host "  GCHAT_WEBHOOK_TRIAGE        = $(if ($gchatTriage)   { '(set)' } else { '(not set — placeholder kept)' })"
+Write-Host "  GCHAT_WEBHOOK_ERROR         = $(if ($gchatError)    { '(set)' } else { '(not set — placeholder kept)' })"
+Write-Host "  N8N_PAGERDUTY_WEBHOOK_PATH  = $(if ($pdWebhookPath) { $pdWebhookPath } else { '(not set — placeholder kept)' })"
 Write-Host ""
 
 # --- Helper: build credential object ------------------------------------------
@@ -66,6 +68,13 @@ $wf = Get-Content $templateFile -Raw | ConvertFrom-Json -Depth 100
 $patched = 0
 
 foreach ($node in $wf.nodes) {
+
+    # PagerDuty Webhook trigger — path substitution
+    if ($node.type -eq 'n8n-nodes-base.webhook' -and $node.parameters.path -eq 'N8N_PAGERDUTY_WEBHOOK_PATH_PLACEHOLDER' -and $pdWebhookPath) {
+        $node.parameters.path = $pdWebhookPath
+        Write-Host "  [webhook-path] $($node.name) → '$pdWebhookPath'"
+        $patched++
+    }
 
     # HTTP Request nodes
     if ($node.type -eq 'n8n-nodes-base.httpRequest') {
