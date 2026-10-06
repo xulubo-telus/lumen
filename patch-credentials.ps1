@@ -1,7 +1,7 @@
 # patch-credentials.ps1
-# Reads credential names and Google Chat webhook URLs from lumen-triage.properties
-# and patches Lumen-Triage-RCS.json so nodes don't show empty dropdowns after import
-# and Google Chat webhooks are ready to fire.
+# Reads the workflow template (Lumen-Triage-RCS.json) and the values in
+# lumen-triage.properties, then writes a ready-to-import file:
+#   Lumen-Triage-RCS-patched.json  (gitignored — contains real credential names)
 #
 # Usage: .\patch-credentials.ps1
 # Run from the lumen-n8n directory after filling in N8N_CRED_NAME_* and GCHAT_WEBHOOK_* values.
@@ -9,8 +9,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$propsFile = Join-Path $PSScriptRoot "lumen-triage.properties"
-$wfFile    = Join-Path $PSScriptRoot "Lumen-Triage-RCS.json"
+$propsFile  = Join-Path $PSScriptRoot "lumen-triage.properties"
+$templateFile = Join-Path $PSScriptRoot "Lumen-Triage-RCS.json"
+$outputFile = Join-Path $PSScriptRoot "Lumen-Triage-RCS-patched.json"
 
 # --- Load properties -----------------------------------------------------------
 $props = @{}
@@ -22,17 +23,20 @@ Get-Content $propsFile | ForEach-Object {
 
 function Get-Prop($key) { if ($props.ContainsKey($key)) { $props[$key] } else { "" } }
 
-$dtLegacy        = Get-Prop 'N8N_CRED_NAME_DYNATRACE_LEGACY'
-$dtPlatform      = Get-Prop 'N8N_CRED_NAME_DYNATRACE_PLATFORM'
-$pdName          = Get-Prop 'N8N_CRED_NAME_PAGERDUTY'
-$googleName      = Get-Prop 'N8N_CRED_NAME_GOOGLE_OAUTH2'
-$openaiName      = Get-Prop 'N8N_CRED_NAME_FUELIX_OPENAI'
-$vectorName      = Get-Prop 'N8N_CRED_NAME_FUELIX_VECTOR'
-$irisName        = Get-Prop 'N8N_CRED_NAME_IRIS'
-$gchatTriage     = Get-Prop 'GCHAT_WEBHOOK_TRIAGE'
-$gchatError      = Get-Prop 'GCHAT_WEBHOOK_ERROR'
+$dtLegacy    = Get-Prop 'N8N_CRED_NAME_DYNATRACE_LEGACY'
+$dtPlatform  = Get-Prop 'N8N_CRED_NAME_DYNATRACE_PLATFORM'
+$pdName      = Get-Prop 'N8N_CRED_NAME_PAGERDUTY'
+$googleName  = Get-Prop 'N8N_CRED_NAME_GOOGLE_OAUTH2'
+$openaiName  = Get-Prop 'N8N_CRED_NAME_FUELIX_OPENAI'
+$vectorName  = Get-Prop 'N8N_CRED_NAME_FUELIX_VECTOR'
+$irisName    = Get-Prop 'N8N_CRED_NAME_IRIS'
+$gchatTriage = Get-Prop 'GCHAT_WEBHOOK_TRIAGE'
+$gchatError  = Get-Prop 'GCHAT_WEBHOOK_ERROR'
 
-Write-Host "Credential names read from properties:"
+Write-Host "Reading template : $templateFile"
+Write-Host "Writing output   : $outputFile"
+Write-Host ""
+Write-Host "Credential names:"
 Write-Host "  DYNATRACE_LEGACY   = '$dtLegacy'"
 Write-Host "  DYNATRACE_PLATFORM = '$dtPlatform'"
 Write-Host "  PAGERDUTY          = '$pdName'"
@@ -42,13 +46,12 @@ Write-Host "  FUELIX_VECTOR      = '$vectorName'"
 Write-Host "  IRIS               = '$irisName'"
 Write-Host ""
 Write-Host "Google Chat webhooks:"
-Write-Host "  GCHAT_WEBHOOK_TRIAGE = '$gchatTriage'"
-Write-Host "  GCHAT_WEBHOOK_ERROR  = '$gchatError'"
+Write-Host "  GCHAT_WEBHOOK_TRIAGE = $(if ($gchatTriage) { '(set)' } else { '(not set — placeholder kept)' })"
+Write-Host "  GCHAT_WEBHOOK_ERROR  = $(if ($gchatError)  { '(set)' } else { '(not set — placeholder kept)' })"
 Write-Host ""
 
 # --- Helper: build credential object ------------------------------------------
 function New-Cred($type, $name) {
-    # id uses a placeholder; n8n resolves by name on import
     $obj = [PSCustomObject]@{}
     $obj | Add-Member -MemberType NoteProperty -Name $type -Value ([PSCustomObject]@{
         id   = "placeholder"
@@ -57,9 +60,8 @@ function New-Cred($type, $name) {
     return $obj
 }
 
-# --- Load workflow -------------------------------------------------------------
-$raw = Get-Content $wfFile -Raw
-$wf  = $raw | ConvertFrom-Json -Depth 100
+# --- Load template (read-only source) -----------------------------------------
+$wf = Get-Content $templateFile -Raw | ConvertFrom-Json -Depth 100
 
 $patched = 0
 
@@ -70,19 +72,19 @@ foreach ($node in $wf.nodes) {
         $auth = if ($node.parameters.PSObject.Properties['authentication']) { [string]$node.parameters.authentication } else { "" }
         $url  = [string]$node.parameters.url
 
-        # --- Google Chat webhook URL substitution ---
+        # Google Chat webhook URL substitution
         if ($url -eq 'GCHAT_WEBHOOK_TRIAGE_PLACEHOLDER' -and $gchatTriage) {
             $node.parameters.url = $gchatTriage
-            Write-Host "  [gchat] $($node.name) → URL set"
+            Write-Host "  [gchat-triage] $($node.name) → URL set"
             $patched++
         }
         elseif ($url -eq 'GCHAT_WEBHOOK_ERROR_PLACEHOLDER' -and $gchatError) {
             $node.parameters.url = $gchatError
-            Write-Host "  [gchat] $($node.name) → URL set"
+            Write-Host "  [gchat-error] $($node.name) → URL set"
             $patched++
         }
 
-        # --- Credential wiring ---
+        # Credential wiring
         if ($auth -eq 'predefinedCredentialType') {
             $ncType = [string]$node.parameters.nodeCredentialType
             $credName = switch ($ncType) {
@@ -97,9 +99,7 @@ foreach ($node in $wf.nodes) {
                 $patched++
             }
         }
-
         elseif ($auth -eq 'genericCredentialType') {
-            # Bearer-token services use httpBearerAuth; header-based services use httpHeaderAuth
             $credType = if ($url -match 'apps\.dynatrace\.com|vectors\.fuelix\.ai') { 'httpBearerAuth' } else { 'httpHeaderAuth' }
             $credName = if     ($url -match 'apps\.dynatrace\.com')  { $dtPlatform }
                         elseif ($url -match 'api\.pagerduty\.com')   { $pdName }
@@ -126,12 +126,11 @@ foreach ($node in $wf.nodes) {
 }
 
 Write-Host ""
-Write-Host "$patched node(s) patched."
+Write-Host "$patched substitution(s) applied."
 
-# --- Save ---------------------------------------------------------------------
-$wf | ConvertTo-Json -Depth 100 -Compress | Set-Content $wfFile -Encoding UTF8
-Write-Host "Saved: $wfFile"
+# --- Write output (never overwrites template) ----------------------------------
+$wf | ConvertTo-Json -Depth 100 -Compress | Set-Content $outputFile -Encoding UTF8
+Write-Host "Output written : $outputFile"
 Write-Host ""
-Write-Host "Next: import the updated JSON into n8n."
-Write-Host "If n8n still shows empty credential dropdowns, open each node and"
-Write-Host "select the credential manually — the name must match exactly."
+Write-Host "Import $outputFile into n8n."
+Write-Host "The template $templateFile is unchanged."

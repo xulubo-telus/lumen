@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-06 10:00 (refactor: template/output separation for workflow JSON)
+
+- `Lumen-Triage-RCS.json` is now a clean template — no credentials wired, webhook URLs as placeholders
+- `patch-credentials.ps1` reads the template and writes `Lumen-Triage-RCS-patched.json` (never overwrites template)
+- `Lumen-Triage-RCS-patched.json` added to `.gitignore` (contains real credential names and webhook URLs)
+- Import `Lumen-Triage-RCS-patched.json` into n8n; re-run the script any time properties change
+
 ## 2026-10-04 17:00 (fix: patch-credentials.ps1 crash on nodes without authentication property)
 
 - Guard `$node.parameters.authentication` access with PSObject.Properties check
