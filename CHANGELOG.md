@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-10-10 (feat: lumen-triage-common.properties + new render.ps1 default)
+
+- Created `lumen-triage-common.properties` with shared values (Dynatrace tenant, GKE cluster,
+  namespaces, app name, credential names, GChat webhooks, BQ location, runbook repo, etc.)
+- Environment-specific keys (GCP project IDs, OAuth client, BQ project, PD webhook path,
+  workflow name, Google credential name) remain in the env-specific overlay file
+- `render.ps1` default changed from `lumen-triage.properties` to
+  `lumen-triage-common.properties, lumen-triage-np.properties`
+- PR environment: `.\render.ps1 lumen-triage-common.properties, lumen-triage.properties`
+- `lumen-triage-common.properties` added to `.gitignore` (contains real API keys)
+
+## 2026-10-10 (feat: render.ps1 supports multiple properties files)
+
+- `-PropsFiles` parameter (was `-PropsFile`) now accepts an array of file paths
+- Files are loaded left-to-right; later files override earlier keys (Spring-style layering)
+- Usage: `.\render.ps1 lumen-triage.properties, lumen-triage-np.properties`
+- Header block prints each loaded properties file path for auditability
+
+## 2026-10-10 (feat: dynamic namespace list in Lumen-Triage-external.json)
+
+- Replaced `YOUR_K8S_NAMESPACE_1` / `YOUR_K8S_NAMESPACE_2` in `Lumen-Triage-external.json` with 4 context-aware placeholder tokens
+  - `YOUR_K8S_NAMESPACES_DQL` (5 nodes — Dynatrace DQL `in()` filter)
+  - `YOUR_K8S_NAMESPACES_GCP_OR` (2 nodes — Cloud Logging `namespace_name=(... OR ...)` filter)
+  - `YOUR_K8S_NAMESPACES_GCP_EACH` (1 node — GCP link-builder with repeated `resource.labels.namespace_name=`)
+  - `YOUR_K8S_NAMESPACES_JSARRAY` (1 node — JavaScript array fallback in GKE metrics query)
+- `render.ps1` now reads `YOUR_K8S_NAMESPACES` (comma-separated) and expands it into all 4 formats
+- Both `.properties` files updated: two `YOUR_K8S_NAMESPACE_*` keys merged into one `YOUR_K8S_NAMESPACES=ns1,ns2,...`
+
+## 2026-10-10 (feat: render.ps1 for Lumen-Triage-external.json)
+
+- Added `render.ps1` — patches `Lumen-Triage-external.json` into `Lumen-Triage-external-patched.json`
+- Replaces all 17 `YOUR_*` infrastructure placeholders via raw string substitution
+- Wires credentials into all 39 httpRequest/langchain nodes
+- Accepts `-PropsFile` parameter (default: `lumen-triage.properties`)
+- Added `Lumen-Triage-external-patched.json` to `.gitignore`
+
 ## 2026-10-06 11:30 (docs: add Lumen project overview link to USAGE.md)
 
 - Added link to Lumen Project Overview artifact at the top of USAGE.md as a prerequisite read before n8n setup
