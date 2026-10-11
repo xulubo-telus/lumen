@@ -1,5 +1,145 @@
 # Changelog
 
+## 2026-10-11 15:00 (feat: Normalize GKE Incident Context node for Manual Triage Form path)
+
+- Added `Normalize GKE Incident Context` Code node (position [1490, 1100])
+- Reads from `Normalize Incidents` (always runs regardless of trigger path) and outputs
+  flat fields: `incident_title`, `occurred_at`, `incident_id`, `status`, `urgency`, `pd_url`
+- Fixes Manual Triage Form trigger path: `Extract Incident Context` (Set node) only runs
+  after the PagerDuty webhook; this new node provides the same shape for all trigger paths
+- `Detect Alert Source` and `Build GKE Log Query` now reference `Normalize GKE Incident Context`
+- Connection chain: `Get PD Alerts → Normalize GKE Incident Context → Detect Alert Source`
+  (mirrors debug flow; `Get PD Alerts` is the natural parent since both nodes need its data)
+
+## 2026-10-11 16:15 (fix: genericAuthType httpHeaderAuth → httpBearerAuth for apps.dynatrace.com nodes)
+
+- 10 nodes targeting `apps.dynatrace.com` had `genericAuthType: httpHeaderAuth` — changed to
+  `httpBearerAuth` to match the Bearer token credential type used by the Dynatrace Platform API
+- Affected: Get Dynatrace Deployments, Get Failing Spans, Get Service Metrics, Get Service Topology,
+  Get Davis & Change Events, Scan Service Health, Get RUM Session Metrics, Resolve DT Workloads,
+  Rank Failing Endpoints, Search Dynatrace Entities (External)
+
+## 2026-10-11 16:00 (fix: BigQuery nodes use YOUR_BQ_PROJECT_ID instead of YOUR_GCP_PROJECT_ID)
+
+- 5 BigQuery node URLs were using `YOUR_GCP_PROJECT_ID` (GKE/app project) instead of
+  `YOUR_BQ_PROJECT_ID` (the separate converged-charging BQ project)
+- Fixed: Insert BigQuery Row, Insert Outcome Row, Fetch Original Triage,
+  Get Endpoint Noise Stats, Get Runbook Catalog
+
+## 2026-10-11 15:30 (fix: Sync GKE Branch merge mode passThrough → chooseBranch)
+
+- `Sync GKE Branch` (typeVersion 3): `mode: "passThrough"` is not valid in v3 — changed to
+  `mode: "chooseBranch"` with `output: "input1"` (same semantics: wait for both inputs,
+  pass through input 1 data from `Parse Runbook Catalog` to `Build Triage Context`)
+
+## 2026-10-11 14:30 (fix: GKE nodes align with debug flow — use Extract Incident Context)
+
+- `Detect Alert Source` and `Build GKE Log Query` in `Lumen-Triage-external.json` now
+  reference `Extract Incident Context` (matching the debug flow), not `Normalize Incidents`
+- `Detect Alert Source`: title read via `$('Extract Incident Context').first().json.incident_title`
+- `Build GKE Log Query`: timestamp read via `inc.occurred_at` from `Extract Incident Context`
+- `Extract Incident Context` (Set node, runs from webhook) outputs flat fields (`incident_title`,
+  `occurred_at`) identical in shape to the debug workflow's Code node — safe to reference
+
+## 2026-10-10 (fix: synchronize GKE branch with Build Triage Context via Merge node)
+
+- Added **`Sync GKE Branch`** (Merge, passThrough/input1, position [10784, 752]) between
+  `Parse Runbook Catalog` and `Build Triage Context`
+- **Input 0**: `Parse Runbook Catalog` — data passed through to `Build Triage Context`
+- **Input 1** (sync signal only, data discarded): `Summarize GKE Incident Logs` (GKE true path)
+  AND `Is GKE Log-Based Alert?` false branch (non-GKE path)
+- Guarantees `Build Triage Context` waits for the GKE branch to complete before executing,
+  regardless of which path the IF takes; prevents the race condition where `Build Triage Context`
+  could run before `Summarize GKE Incident Logs` finished
+
+## 2026-10-10 (feat: PagerDuty nodes use predefinedCredentialType / pagerDutyOAuth2Api)
+
+- Changed all 8 PagerDuty HTTP Request nodes in `Lumen-Triage-external.json` and
+  2 nodes in `Lumen-GKE-Debug.json` from `genericCredentialType / httpHeaderAuth`
+  to `predefinedCredentialType / pagerDutyOAuth2Api`
+- Updated `render.ps1`: added `pagerDutyOAuth2Api` case to the `predefinedCredentialType`
+  switch; removed the `api\.pagerduty\.com` match from the `genericCredentialType` branch
+
+## 2026-10-10 (fix: correct PD alerts accessor in Detect Alert Source)
+
+- Fixed `Detect Alert Source` in `Lumen-Triage-external.json`:
+  `json?.incident?.alerts` → `json?.alerts`
+- PD `/incidents/{id}/alerts` returns `{ alerts: [...] }` directly; the `.incident.`
+  nesting never existed — `alerts` was always an empty array, so `hasLogMetric` was
+  always `false` and the GKE branch never activated on real incidents
+- Fix discovered by running the debug workflow (`Lumen-GKE-Debug.json`) against a
+  live incident; merged back to the main template
+
+## 2026-10-10 (fix: Build GKE Log Query uses logsink bucket instead of _Default)
+
+- Updated `resourceNames` in `Build GKE Log Query` (both `Lumen-Triage-external.json` and `Lumen-GKE-Debug.json`)
+  from `projects/YOUR_GCP_LOGGING_PROJECT_ID/locations/global/buckets/_Default/views/_AllLogs`
+  to `projects/cio-logging-storage-1b866dc7/locations/northamerica-northeast1/buckets/logsink_bucket_kitchen_sink/views/_AllLogs`
+- Matches the sink bucket already used by `Get Error Logs` and `Get GKE Pod Events`
+- Re-rendered both patched output files
+
+## 2026-10-10 (feat: render-gke.ps1 for debug workflow)
+
+- Added `render-gke.ps1` — thin wrapper that calls `render.ps1 -Template Lumen-GKE-Debug.json`
+- Accepts the same `-PropsFiles` parameter; forwards it directly to `render.ps1`
+- Outputs `Lumen-GKE-Debug-patched.json`
+
+## 2026-10-10 (feat: Lumen-GKE-Debug standalone debug workflow)
+
+- Added `Lumen-GKE-Debug.json` — standalone n8n workflow for debugging GKE log-based alert triage
+- 13-node linear flow:
+  1. **Run Debug** (Manual Trigger)
+  2. **Set Incident ID** (Set node — edit `pd_incident_id` value here before running)
+  3. **Get PD Incident** (HTTP GET `/incidents/{id}`, PD httpHeaderAuth)
+  4. **Get PD Alerts** (HTTP GET `/incidents/{id}/alerts`, PD httpHeaderAuth)
+  5. **Extract Incident Context** (Code — normalises incident fields)
+  6. **Detect Alert Source** (Code — detects log-based metric signal, extracts `metric_name`)
+  7. **Is GKE Log-Based Alert?** (IF — true/false branch)
+  8. **Get Log Metric Definition** (HTTP GET Cloud Logging, googleOAuth2Api, `continueOnFail`)
+  9. **Build GKE Log Query** (Code — uses metric filter or broad fallback)
+  10. **Get GKE Incident Logs** (HTTP POST `entries:list`, googleOAuth2Api)
+  11. **Summarize GKE Incident Logs** (Code — groups by container/severity, top 30 messages)
+  12. **Build AI Context** (Code — assembles structured prompt with triage questions)
+  13. **Not A GKE Log Alert** (Set — false branch message)
+- Updated `render.ps1` to accept `-Template` parameter (default: `Lumen-Triage-external.json`);
+  output is `<template-basename>-patched.json`; usage: `.\render.ps1 -Template Lumen-GKE-Debug.json`
+- Added `Lumen-GKE-Debug-patched.json` to `.gitignore`
+
+## 2026-10-10 (feat: derive log filter from GCP metric definition)
+
+- Added **`Get Log Metric Definition`** (HTTP Request GET, `googleOAuth2Api`, `continueOnFail`) between
+  `Is GKE Log-Based Alert?` and `Build GKE Log Query`
+- Calls `GET https://logging.googleapis.com/v2/projects/{YOUR_GCP_LOGGING_PROJECT_ID}/metrics/{metric_name}`
+  to retrieve the exact log filter that feeds the triggering metric (e.g.
+  `resource.type="k8s_container" AND severity>=ERROR AND ...`)
+- **`Detect Alert Source`** updated: extracts `metric_name` from `alerts[0].body.details.incident.metric.type`
+  (falls back to `alerts[0].body.details.metric.type`); returns `metric_name` instead of `log_filter_hint`
+- **`Build GKE Log Query`** updated: reads `$('Get Log Metric Definition').first().json.filter` via try/catch;
+  falls back to broad namespace filter when metric definition is unavailable (404, empty metric name, etc.)
+- `Is GKE Log-Based Alert?` true branch now routes through `Get Log Metric Definition` → `Build GKE Log Query`
+- `render.ps1` auto-wires `Get Log Metric Definition` to `Google account 35`; 123 total substitutions
+
+## 2026-10-10 (feat: GKE log-based metrics alert enrichment branch)
+
+- Added 5-node parallel branch to `Lumen-Triage-external.json` that activates when a PagerDuty
+  alert is triggered by a GKE log-based metric (no linked Dynatrace problem)
+- **`Detect Alert Source`** (Code): detects log-based metric signal from PD alert payload and
+  incident title; sets `is_gke_log_alert` flag and `log_filter_hint`
+- **`Is GKE Log-Based Alert?`** (IF): gates the branch; false path is a silent no-op
+- **`Build GKE Log Query`** (Code): constructs Cloud Logging `entries:list` request scoped to
+  ±1 h/30 min around `occurred_at`; uses existing `YOUR_GCP_PROJECT_ID`,
+  `YOUR_GCP_LOGGING_PROJECT_ID`, `YOUR_K8S_NAMESPACES_GCP_OR` placeholders
+- **`Get GKE Incident Logs`** (HTTP Request, POST, `googleOAuth2Api`): queries
+  `https://logging.googleapis.com/v2/entries:list`; `render.ps1` auto-wires `Google account 35`
+- **`Summarize GKE Incident Logs`** (Code): groups by container/severity, extracts error tokens,
+  keeps top 30 entries truncated to 400 chars
+- **`Build Triage Context`** patched: reads `Summarize GKE Incident Logs` via try/catch;
+  adds `gke_incident_logs` field to returned context (null when branch did not run)
+- **`Claude Triage Agent`** prompt patched: new section inserted before `## RUM` instructs
+  Claude to treat log entries as primary evidence when `gke_incident_logs` is present
+- Branch connects from `Extract Dynatrace Problem Ref` in parallel with `Get Linked Dynatrace Problem`
+- No changes to `render.ps1`, properties files, or `.gitignore`
+
 ## 2026-10-10 (feat: lumen-triage-common.properties + new render.ps1 default)
 
 - Created `lumen-triage-common.properties` with shared values (Dynatrace tenant, GKE cluster,

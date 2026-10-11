@@ -1,0 +1,396 @@
+{
+  "name": "Lumen-GKE-Log-Debug",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "dbg-0001-0000-4a01-b001-000000000001",
+      "name": "Run Debug",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dbg-set-assign-01",
+              "name": "pd_incident_id",
+              "value": "PXXXXXXX",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dbg-0002-0000-4a01-b001-000000000002",
+      "name": "Set Incident ID",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        280,
+        300
+      ],
+      "notes": "Change pd_incident_id to the PagerDuty incident you want to debug."
+    },
+    {
+      "parameters": {
+        "url": "=https://api.pagerduty.com/incidents/{{ $json.pd_incident_id }}",
+        "authentication": "predefinedCredentialType",
+        "options": {
+          "timeout": 15000
+        },
+        "nodeCredentialType": "pagerDutyOAuth2Api"
+      },
+      "id": "dbg-0003-0000-4a01-b001-000000000003",
+      "name": "Get PD Incident",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.pagerduty.com/incidents/{{ $('Set Incident ID').first().json.pd_incident_id }}/alerts",
+        "authentication": "predefinedCredentialType",
+        "options": {
+          "timeout": 15000
+        },
+        "nodeCredentialType": "pagerDutyOAuth2Api"
+      },
+      "id": "dbg-0004-0000-4a01-b001-000000000004",
+      "name": "Get PD Alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        840,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const inc = $('Get PD Incident').first().json.incident;\nreturn [{ json: {\n  incident_id:    inc.id,\n  incident_title: inc.title,\n  occurred_at:    inc.created_at,\n  pd_url:         inc.html_url,\n  status:         inc.status,\n  urgency:        inc.urgency\n}}];"
+      },
+      "id": "dbg-0005-0000-4a01-b001-000000000005",
+      "name": "Extract Incident Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const title = ($('Extract Incident Context').first().json.incident_title ?? '').toLowerCase();\nconst alerts = $('Get PD Alerts').first().json?.alerts ?? [];\nconst alertsStr = JSON.stringify(alerts).toLowerCase();\nconst hasLogMetric = alertsStr.includes('logging.googleapis.com/user/') || alertsStr.includes('log_based_metric');\nconst titleSignal = title.includes('gke') || title.includes('log-based') || title.includes('log metric') || title.includes('error rate') || title.includes('error count');\nconst is_gke_log_alert = hasLogMetric || titleSignal;\nconst metricType = (alerts[0]?.body?.details?.incident?.metric?.type ?? alerts[0]?.body?.details?.metric?.type ?? '');\nconst metric_name = metricType.replace('logging.googleapis.com/user/', '');\nreturn [{ json: { is_gke_log_alert, metric_name, hasLogMetric, titleSignal, metricType } }];"
+      },
+      "id": "dbg-0006-0000-4a01-b001-000000000006",
+      "name": "Detect Alert Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dbg-cond-01",
+              "leftValue": "={{ $json.is_gke_log_alert }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "dbg-0007-0000-4a01-b001-000000000007",
+      "name": "Is GKE Log-Based Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://logging.googleapis.com/v2/projects/YOUR_GCP_LOGGING_PROJECT_ID/metrics/{{ $('Detect Alert Source').first().json.metric_name }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "dbg-0008-0000-4a01-b001-000000000008",
+      "name": "Get Log Metric Definition",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "continueOnFail": true,
+      "retryOnFail": false,
+      "position": [
+        1960,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const inc = $('Extract Incident Context').first().json;\nconst start = new Date(new Date(inc.occurred_at).getTime() - 60*60*1000).toISOString();\nconst end   = new Date(new Date(inc.occurred_at).getTime() + 30*60*1000).toISOString();\nlet metricFilter = null;\ntry { metricFilter = $('Get Log Metric Definition').first().json.filter ?? null; } catch(e) {}\nconst baseFilter = metricFilter\n  ? '(' + metricFilter + ') AND timestamp>=\"' + start + '\" AND timestamp<=\"' + end + '\"'\n  : 'resource.type=\"k8s_container\" AND resource.labels.project_id=\"YOUR_GCP_PROJECT_ID\" AND resource.labels.namespace_name=(YOUR_K8S_NAMESPACES_GCP_OR) AND severity>=\"WARNING\" AND timestamp>=\"' + start + '\" AND timestamp<=\"' + end + '\"';\nreturn [{ json: {\n  resourceNames: ['projects/cio-logging-storage-1b866dc7/locations/northamerica-northeast1/buckets/logsink_bucket_kitchen_sink/views/_AllLogs'],\n  filter: baseFilter,\n  orderBy: 'timestamp desc',\n  pageSize: 100\n}}];"
+      },
+      "id": "dbg-0009-0000-4a01-b001-000000000009",
+      "name": "Build GKE Log Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://logging.googleapis.com/v2/entries:list",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "dbg-0010-0000-4a01-b001-000000000010",
+      "name": "Get GKE Incident Logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "position": [
+        2520,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const entries = $input.first().json.entries ?? [];\nconst byContainer = {};\nfor (const e of entries) {\n  const key = (e.resource?.labels?.container_name ?? 'unknown') + '/' + (e.severity ?? 'DEFAULT');\n  byContainer[key] = (byContainer[key] ?? 0) + 1;\n}\nconst topMessages = entries.slice(0, 30).map(e => ({\n  ts:        e.timestamp,\n  sev:       e.severity,\n  container: e.resource?.labels?.container_name,\n  pod:       e.resource?.labels?.pod_name,\n  msg: (e.textPayload ?? e.jsonPayload?.message ?? e.jsonPayload?.msg ?? '').slice(0, 400)\n}));\nconst errorCodes = [...new Set(\n  entries.flatMap(e => (e.textPayload ?? e.jsonPayload?.message ?? '').match(/[A-Z_]{4,}/g) ?? [])\n)].slice(0, 20);\nreturn [{ json: {\n  total_entries: entries.length,\n  by_container:  byContainer,\n  error_tokens:  errorCodes,\n  entries:       topMessages\n}}];"
+      },
+      "id": "dbg-0011-0000-4a01-b001-000000000011",
+      "name": "Summarize GKE Incident Logs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const inc      = $('Extract Incident Context').first().json;\nconst detected = $('Detect Alert Source').first().json;\nconst logs     = $('Summarize GKE Incident Logs').first().json;\n\nconst prompt = [\n  '# GKE Log-Based Alert — AI Triage Context',\n  '',\n  '## Incident',\n  'Title:  ' + inc.incident_title,\n  'Time:   ' + inc.occurred_at,\n  'Status: ' + inc.status,\n  'URL:    ' + inc.pd_url,\n  '',\n  '## Alert Detection',\n  'Metric type:            ' + (detected.metricType  || '(not found in alert payload)'),\n  'Metric name extracted:  ' + (detected.metric_name || '(empty)'),\n  'Triggered by log metric: ' + detected.hasLogMetric,\n  'Triggered by title kw:  ' + detected.titleSignal,\n  '',\n  '## GKE Log Summary (up to 30 entries, 1h before – 30m after alert)',\n  JSON.stringify(logs, null, 2),\n  '',\n  '## Triage Questions',\n  '1. What is the root cause of this alert?',\n  '2. Which containers/pods are affected and how severely?',\n  '3. Is this a sudden spike or a recurring pattern?',\n  '4. What immediate remediation steps do you recommend?',\n  '5. What monitoring improvements would catch this earlier?'\n].join('\\n');\n\nreturn [{ json: { incident: inc, detection: detected, log_summary: logs, ai_prompt: prompt } }];"
+      },
+      "id": "dbg-0012-0000-4a01-b001-000000000012",
+      "name": "Build AI Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dbg-not-gke-01",
+              "name": "message",
+              "value": "Not a GKE log-based metric alert. hasLogMetric=false and no title keywords matched. Check the alert source manually.",
+              "type": "string"
+            },
+            {
+              "id": "dbg-not-gke-02",
+              "name": "incident_title",
+              "value": "={{ $(\"Detect Alert Source\").first().json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dbg-0013-0000-4a01-b001-000000000013",
+      "name": "Not A GKE Log Alert",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1960,
+        500
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Debug": {
+      "main": [
+        [
+          {
+            "node": "Set Incident ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Incident ID": {
+      "main": [
+        [
+          {
+            "node": "Get PD Incident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PD Incident": {
+      "main": [
+        [
+          {
+            "node": "Get PD Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PD Alerts": {
+      "main": [
+        [
+          {
+            "node": "Extract Incident Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Incident Context": {
+      "main": [
+        [
+          {
+            "node": "Detect Alert Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Alert Source": {
+      "main": [
+        [
+          {
+            "node": "Is GKE Log-Based Alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is GKE Log-Based Alert?": {
+      "main": [
+        [
+          {
+            "node": "Get Log Metric Definition",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not A GKE Log Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Log Metric Definition": {
+      "main": [
+        [
+          {
+            "node": "Build GKE Log Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build GKE Log Query": {
+      "main": [
+        [
+          {
+            "node": "Get GKE Incident Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get GKE Incident Logs": {
+      "main": [
+        [
+          {
+            "node": "Summarize GKE Incident Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize GKE Incident Logs": {
+      "main": [
+        [
+          {
+            "node": "Build AI Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "dbg-v001-0000-0000-0000-000000000001",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": ""
+  },
+  "id": "dbg-wf01-0000-0000-0000-000000000001",
+  "tags": []
+}

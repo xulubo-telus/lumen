@@ -1,24 +1,27 @@
 # render.ps1
-# Reads Lumen-Triage-external.json and one or more .properties files, substitutes
-# all YOUR_* placeholders, wires credentials into every node, and writes:
-#   Lumen-Triage-external-patched.json  (gitignored — contains real values)
+# Reads a workflow JSON template and one or more .properties files, substitutes
+# all YOUR_* placeholders, wires credentials into every node, and writes a
+# patched output file (gitignored — contains real values).
 #
 # Files are loaded left-to-right; later files override earlier ones.
+# Output file name: <template-basename>-patched.json
 #
 # Usage:
-#   .\render.ps1                                                                          # default: common + np
+#   .\render.ps1                                                                          # default template + props
 #   .\render.ps1 lumen-triage-common.properties, lumen-triage-np.properties              # explicit default
 #   .\render.ps1 lumen-triage-common.properties, lumen-triage.properties                 # PR environment
+#   .\render.ps1 -Template Lumen-GKE-Debug.json                                          # debug workflow
 
 param(
-    [string[]]$PropsFiles = @("lumen-triage-common.properties", "lumen-triage-np.properties")
+    [string[]]$PropsFiles = @("lumen-triage-common.properties", "lumen-triage-pr.properties"),
+    [string]$Template = "Lumen-Triage-external.json"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$templateFile = Join-Path $PSScriptRoot "Lumen-Triage-external.json"
-$outputFile   = Join-Path $PSScriptRoot "Lumen-Triage-external-patched.json"
+$templateFile = Join-Path $PSScriptRoot $Template
+$outputFile   = Join-Path $PSScriptRoot ($Template -replace '\.json$', '-patched.json')
 
 # --- Load properties (later files override earlier ones) ----------------------
 $props = @{}
@@ -195,10 +198,11 @@ foreach ($node in $wf.nodes) {
         if ($auth -eq 'predefinedCredentialType') {
             $ncType   = [string]$node.parameters.nodeCredentialType
             $credName = switch ($ncType) {
-                'dynatraceApi'    { $dtLegacy }
-                'googleOAuth2Api' { $googleName }
-                'openAiApi'       { $openaiName }
-                default           { "" }
+                'dynatraceApi'       { $dtLegacy }
+                'googleOAuth2Api'    { $googleName }
+                'openAiApi'          { $openaiName }
+                'pagerDutyOAuth2Api' { $pdName }
+                default              { "" }
             }
             if ($credName) {
                 $node | Add-Member -MemberType NoteProperty -Name credentials -Value (New-Cred $ncType $credName) -Force
@@ -209,7 +213,6 @@ foreach ($node in $wf.nodes) {
         elseif ($auth -eq 'genericCredentialType') {
             $credType = if ($url -match 'apps\.dynatrace\.com|vectors\.fuelix\.ai') { 'httpBearerAuth' } else { 'httpHeaderAuth' }
             $credName = if     ($url -match 'apps\.dynatrace\.com') { $dtPlatform }
-                        elseif ($url -match 'api\.pagerduty\.com')  { $pdName }
                         elseif ($url -match 'vectors\.fuelix\.ai')  { $vectorName }
                         elseif ($url -match 'iris\.telus\.com')     { $irisName }
                         else                                         { "" }
